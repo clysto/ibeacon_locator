@@ -1,4 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:developer';
 import 'package:flutter/material.dart';
+import 'package:beacons_plugin/beacons_plugin.dart';
+import 'package:ibeacon_locator/map.dart';
 
 void main() {
   runApp(const MyApp());
@@ -11,20 +16,11 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'iBeacon Locator',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
         primarySwatch: Colors.blue,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'iBeacon Locator'),
     );
   }
 }
@@ -32,84 +28,194 @@ class MyApp extends StatelessWidget {
 class MyHomePage extends StatefulWidget {
   const MyHomePage({Key? key, required this.title}) : super(key: key);
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
   final String title;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class BeaconData {
+  String name;
+  String uuid;
+  String major;
+  String minor;
+  String rssi;
+  String distance;
+  String proximity;
 
-  void _incrementCounter() {
+  BeaconData(this.name, this.uuid, this.major, this.minor, this.rssi,
+      this.distance, this.proximity);
+
+  BeaconData.fromJson(Map<String, dynamic> json)
+      : name = json['name'],
+        uuid = json['uuid'],
+        major = json['major'],
+        minor = json['minor'],
+        rssi = json['rssi'],
+        distance = json['distance'],
+        proximity = json['proximity'];
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  final StreamController<String> _beaconEventsController =
+      StreamController<String>.broadcast();
+
+  bool _isRunning = false;
+  final Map<String, BeaconData> _beaconDataList = <String, BeaconData>{};
+  BeaconMap _room = allMaps[0];
+
+  @override
+  void initState() {
+    super.initState();
+    BeaconsPlugin.listenToBeacons(_beaconEventsController);
+    _beaconEventsController.stream.listen(handleScanResults, onDone: () {},
+        onError: (error) {
+      log("Error: $error");
+    });
+  }
+
+  List<Widget> _buildBeaconTable() {
+    final List<Widget> widgets = <Widget>[];
+    for (BeaconData data in _beaconDataList.values) {
+      widgets.add(Row(children: [
+        Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: DecoratedBox(
+                child:
+                    const Icon(Icons.bluetooth, size: 30, color: Colors.white),
+                decoration: BoxDecoration(
+                    color: Colors.blue,
+                    borderRadius: BorderRadius.circular(20)),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              Text(
+                data.name,
+                style:
+                    const TextStyle(fontSize: 20, fontFamily: "IBM Plex Mono"),
+              ),
+              Text(
+                "RSSI: ${data.rssi}",
+                style: const TextStyle(fontFamily: "IBM Plex Mono"),
+              ),
+              Text(
+                data.uuid,
+                overflow: TextOverflow.fade,
+                maxLines: 1,
+                softWrap: false,
+                style: const TextStyle(
+                    color: Colors.grey, fontFamily: "IBM Plex Mono"),
+              ),
+            ],
+          ),
+        )
+      ]));
+      widgets.add(const Divider());
+    }
+    return widgets;
+  }
+
+  void handleScanResults(String data) {
+    if (data.isNotEmpty && _isRunning) {
+      var parsed = BeaconData.fromJson(jsonDecode(data));
+      // 和地图中相同 minor 的信息加入 list
+      for (var beacon in _room.beacons) {
+        if (beacon.minor == parsed.minor) {
+          setState(() {
+            _beaconDataList[parsed.minor] = parsed;
+          });
+        }
+      }
+    }
+  }
+
+  void _startScan() async {
+    // 开始扫描
+
+    for (var beacon in _room.beacons) {
+      await BeaconsPlugin.addRegion("EW80ECCACD", beacon.uuid);
+    }
+
+    await BeaconsPlugin.startMonitoring();
+
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _isRunning = true;
+    });
+  }
+
+  void _stopScan() async {
+    // 停止扫描
+    await BeaconsPlugin.stopMonitoring();
+    await BeaconsPlugin.clearRegions();
+    setState(() {
+      _isRunning = false;
+      _beaconDataList.clear();
+    });
+  }
+
+  void _handleRoomChange(BeaconMap? room) {
+    setState(() {
+      _room = room!;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
-            ),
-          ],
+        appBar: AppBar(
+          title: Text(widget.title),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
-    );
+        bottomNavigationBar: BottomAppBar(
+          color: Colors.transparent,
+          child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(40),
+                ),
+                onPressed: _isRunning ? _stopScan : _startScan,
+                child: Text(_isRunning ? "停止扫描" : "开始扫描"),
+              )),
+          elevation: 0,
+        ),
+        body: Container(
+          padding: const EdgeInsets.all(16),
+          child: Center(
+            child: Column(
+              children: <Widget>[
+                DropdownButton<BeaconMap>(
+                  isExpanded: true,
+                  icon: const Icon(Icons.arrow_downward),
+                  onChanged: _handleRoomChange,
+                  value: _room,
+                  items:
+                      allMaps.map<DropdownMenuItem<BeaconMap>>((BeaconMap map) {
+                    return DropdownMenuItem<BeaconMap>(
+                      value: map,
+                      child: Text(map.name),
+                    );
+                  }).toList(),
+                ),
+                Container(
+                  padding: const EdgeInsets.only(top: 16, bottom: 16),
+                  child: Column(
+                    children: _buildBeaconTable(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ));
   }
 }

@@ -2,18 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- 获取定位权限 -->
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>App needs location permissions to scan nearby beacons.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>App needs location permissions to scan nearby beacons.</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>App needs location permissions to scan nearby beacons.</string>
-
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>IBeacon Locator</string>
+	<string>iBeacon Locator</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -32,6 +24,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>App needs location permissions to scan nearby beacons.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>App needs location permissions to scan nearby beacons.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>App needs location permissions to scan nearby beacons.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
