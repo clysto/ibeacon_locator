@@ -173,7 +173,9 @@ class _MyHomePageState extends State<MyHomePage> {
   ///
   List<Widget> _buildBeaconTable() {
     final List<Widget> widgets = <Widget>[];
-    for (BeaconData data in _beaconDataList.values) {
+    for (MapEntry<String, BeaconData> entry in _beaconDataList.entries) {
+      BeaconData data = entry.value;
+      String minor = entry.key;
       widgets.add(Row(children: [
         Column(
           mainAxisAlignment: MainAxisAlignment.start,
@@ -198,12 +200,12 @@ class _MyHomePageState extends State<MyHomePage> {
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
               Text(
-                data.name,
+                "${data.name}(Minor: $minor)",
                 style:
                     const TextStyle(fontSize: 20, fontFamily: "IBM Plex Mono"),
               ),
               Text(
-                "RSSI: ${data.rssi}",
+                "RSSI: ${data.rssi} Distance: ${data.distance}",
                 style: const TextStyle(fontFamily: "IBM Plex Mono"),
               ),
               Text(
