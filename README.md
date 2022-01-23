@@ -2,10 +2,8 @@
 
 <h1 align="center">iBeacon Locator</h1>
 
----
-
 iBeacon Locator 是一款可以扫描周围 BLE Beacon 设备以及获取手机 IMU 数据的 APP。
 
 ## 截图
 
-![screenshot](./media/screenshot.png)
+<p><img width="400" src="./media/screenshot.png" alt="screenshot"></p>
