@@ -4,6 +4,8 @@ import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:beacons_plugin/beacons_plugin.dart';
 import 'package:ibeacon_locator/map.dart';
+import 'package:ibeacon_locator/beacon.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
 void main() {
   runApp(const MyApp());
@@ -34,35 +36,32 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class BeaconData {
-  String name;
-  String uuid;
-  String major;
-  String minor;
-  String rssi;
-  String distance;
-  String proximity;
-
-  BeaconData(this.name, this.uuid, this.major, this.minor, this.rssi,
-      this.distance, this.proximity);
-
-  BeaconData.fromJson(Map<String, dynamic> json)
-      : name = json['name'],
-        uuid = json['uuid'],
-        major = json['major'],
-        minor = json['minor'],
-        rssi = json['rssi'],
-        distance = json['distance'],
-        proximity = json['proximity'];
-}
-
 class _MyHomePageState extends State<MyHomePage> {
   final StreamController<String> _beaconEventsController =
       StreamController<String>.broadcast();
+  final List<StreamSubscription<dynamic>> _sensorsSubscriptions =
+      <StreamSubscription<dynamic>>[];
+
+  // IMU 数据
+  List<double>? _accelerometerValues;
+  List<double>? _gyroscopeValues;
+  List<double>? _magnetometerValues;
+
+  Timer? _sensorTimer;
 
   bool _isRunning = false;
+
   final Map<String, BeaconData> _beaconDataList = <String, BeaconData>{};
   BeaconMap _room = allMaps[0];
+
+  @override
+  void dispose() {
+    super.dispose();
+    for (final subscription in _sensorsSubscriptions) {
+      subscription.cancel();
+    }
+    _sensorTimer?.cancel();
+  }
 
   @override
   void initState() {
@@ -72,8 +71,106 @@ class _MyHomePageState extends State<MyHomePage> {
         onError: (error) {
       log("Error: $error");
     });
+    _sensorsSubscriptions.add(
+      accelerometerEvents.listen(
+        (AccelerometerEvent event) {
+          _accelerometerValues = <double>[event.x, event.y, event.z];
+        },
+      ),
+    );
+    _sensorsSubscriptions.add(
+      gyroscopeEvents.listen(
+        (GyroscopeEvent event) {
+          _gyroscopeValues = <double>[event.x, event.y, event.z];
+          // setState(() {
+          // });
+        },
+      ),
+    );
+    _sensorsSubscriptions.add(
+      magnetometerEvents.listen(
+        (MagnetometerEvent event) {
+          _magnetometerValues = <double>[event.x, event.y, event.z];
+        },
+      ),
+    );
+    _sensorTimer = Timer.periodic(const Duration(milliseconds: 100), (t) {
+      setState(() {
+        _accelerometerValues = _accelerometerValues;
+        _gyroscopeValues = _gyroscopeValues;
+        _magnetometerValues = _magnetometerValues;
+      });
+    });
   }
 
+  ///
+  /// 渲染一个 IMU 类别
+  ///
+  Widget _buildSensorItem(String title, List<double>? data) {
+    String? x = data?.elementAt(0).toStringAsFixed(2);
+    String? y = data?.elementAt(1).toStringAsFixed(2);
+    String? z = data?.elementAt(2).toStringAsFixed(2);
+    return Row(children: [
+      Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 40,
+            height: 40,
+            child: DecoratedBox(
+              child: const Icon(Icons.sensors, size: 30, color: Colors.white),
+              decoration: BoxDecoration(
+                  color: Colors.blueGrey,
+                  borderRadius: BorderRadius.circular(20)),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontSize: 20, fontFamily: "IBM Plex Mono"),
+            ),
+            Text(
+              "X: $x",
+              style: const TextStyle(fontFamily: "IBM Plex Mono"),
+            ),
+            Text(
+              "Y: $y",
+              style: const TextStyle(fontFamily: "IBM Plex Mono"),
+            ),
+            Text(
+              "Z: $z",
+              style: const TextStyle(fontFamily: "IBM Plex Mono"),
+            ),
+          ],
+        ),
+      )
+    ]);
+  }
+
+  ///
+  /// 渲染 IMU 节点列表
+  ///
+  List<Widget> _buildSensorsTable() {
+    final List<Widget> widgets = <Widget>[];
+    widgets.add(_buildSensorItem("Accelerometer", _accelerometerValues));
+    widgets.add(const Divider());
+    widgets.add(_buildSensorItem("Gyroscope", _gyroscopeValues));
+    widgets.add(const Divider());
+    widgets.add(_buildSensorItem("Magnetometer", _magnetometerValues));
+    widgets.add(const Divider());
+    return widgets;
+  }
+
+  ///
+  /// 渲染 iBeacon 节点列表
+  ///
   List<Widget> _buildBeaconTable() {
     final List<Widget> widgets = <Widget>[];
     for (BeaconData data in _beaconDataList.values) {
@@ -88,7 +185,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 child:
                     const Icon(Icons.bluetooth, size: 30, color: Colors.white),
                 decoration: BoxDecoration(
-                    color: Colors.blue,
+                    color: Colors.lightBlue,
                     borderRadius: BorderRadius.circular(20)),
               ),
             ),
@@ -126,6 +223,9 @@ class _MyHomePageState extends State<MyHomePage> {
     return widgets;
   }
 
+  ///
+  /// 处理扫描到的 BLE 信号
+  ///
   void handleScanResults(String data) {
     if (data.isNotEmpty && _isRunning) {
       var parsed = BeaconData.fromJson(jsonDecode(data));
@@ -208,7 +308,13 @@ class _MyHomePageState extends State<MyHomePage> {
                   }).toList(),
                 ),
                 Container(
-                  padding: const EdgeInsets.only(top: 16, bottom: 16),
+                  padding: const EdgeInsets.only(top: 16, bottom: 0),
+                  child: Column(
+                    children: _isRunning ? _buildSensorsTable() : <Widget>[],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.only(top: 0, bottom: 16),
                   child: Column(
                     children: _buildBeaconTable(),
                   ),
