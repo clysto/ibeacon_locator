@@ -10,6 +10,8 @@
 
 iBeacon Locator 是一款可以扫描周围 BLE Beacon 设备以及获取手机 IMU 数据的 APP。
 
+> 目前仅适配了 IOS 端
+
 ## 截图
 
 <p><img width="400" src="./media/screenshot.png" alt="screenshot"></p>
