@@ -36,6 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.2
   beacons_plugin: ^2.0.5
   sensors_plus: ^1.2.1
+  mqtt_client: ^9.6.5
 
 dev_dependencies:
   flutter_test:

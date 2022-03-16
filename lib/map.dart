@@ -30,7 +30,12 @@ List<BeaconMap> _buildAllMaps() {
       Beacon("01122334-4556-6778-899A-ABBCCDDEEFF0", "10006", "19260"));
   room804.addBeacon(
       Beacon("01122334-4556-6778-899A-ABBCCDDEEFF0", "10006", "18739"));
-  return <BeaconMap>[room804];
+  var test = BeaconMap("实验用途");
+  test.addBeacon(
+      Beacon("01122334-4556-6778-899A-ABBCCDDEEFF0", "10006", "19056"));
+  test.addBeacon(
+      Beacon("01122334-4556-6778-899A-ABBCCDDEEFF0", "10006", "19141"));
+  return <BeaconMap>[room804, test];
 }
 
 var allMaps = _buildAllMaps();

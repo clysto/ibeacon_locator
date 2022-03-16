@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:beacons_plugin/beacons_plugin.dart';
 import 'package:ibeacon_locator/map.dart';
 import 'package:ibeacon_locator/beacon.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:mqtt_client/mqtt_client.dart';
+import 'package:mqtt_client/mqtt_server_client.dart';
 
 void main() {
   runApp(const MyApp());
@@ -14,7 +17,6 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -46,6 +48,11 @@ class _MyHomePageState extends State<MyHomePage> {
   List<double>? _accelerometerValues;
   List<double>? _gyroscopeValues;
   List<double>? _magnetometerValues;
+
+  // MQTT client
+  final _client = MqttServerClient.withPort('202.38.75.252', 'ibeacon', 1883);
+
+  bool _isConnectToMqtt = false;
 
   Timer? _sensorTimer;
 
@@ -82,8 +89,6 @@ class _MyHomePageState extends State<MyHomePage> {
       gyroscopeEvents.listen(
         (GyroscopeEvent event) {
           _gyroscopeValues = <double>[event.x, event.y, event.z];
-          // setState(() {
-          // });
         },
       ),
     );
@@ -236,6 +241,12 @@ class _MyHomePageState extends State<MyHomePage> {
         if (beacon.minor == parsed.minor) {
           setState(() {
             _beaconDataList[parsed.minor] = parsed;
+            if (_isConnectToMqtt) {
+              final builder = MqttClientPayloadBuilder();
+              builder.addString(data);
+              _client.publishMessage(
+                  "rssi", MqttQos.exactlyOnce, builder.payload!);
+            }
           });
         }
       }
@@ -266,9 +277,38 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  ///
+  /// 是否将数据推送到服务器
+  ///
+  void _handleConnectStateChange(bool state) async {
+    if (state) {
+      if (!_isRunning) {
+        return;
+      }
+      _isConnectToMqtt = true;
+      try {
+        await _client.connect();
+      } on NoConnectionException catch (e) {
+        // Raised by the client when connection fails.
+        // print('EXAMPLE::client exception - $e');
+        _isConnectToMqtt = false;
+        _client.disconnect();
+      } on SocketException catch (e) {
+        // Raised by the socket layer
+        // print('EXAMPLE::socket exception - $e');
+        _client.disconnect();
+        _isConnectToMqtt = false;
+      }
+    } else {
+      _client.disconnect();
+      _isConnectToMqtt = false;
+    }
+  }
+
   void _handleRoomChange(BeaconMap? room) {
     setState(() {
       _room = room!;
+      _beaconDataList.clear();
     });
   }
 
@@ -291,7 +331,7 @@ class _MyHomePageState extends State<MyHomePage> {
               )),
           elevation: 0,
         ),
-        body: Container(
+        body: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Center(
             child: Column(
@@ -308,6 +348,18 @@ class _MyHomePageState extends State<MyHomePage> {
                       child: Text(map.name),
                     );
                   }).toList(),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    const Text("是否推送到服务器",
+                        style: TextStyle(
+                            color: Colors.grey, fontWeight: FontWeight.bold)),
+                    Switch(
+                      value: _isConnectToMqtt,
+                      onChanged: _handleConnectStateChange,
+                    ),
+                  ],
                 ),
                 Container(
                   padding: const EdgeInsets.only(top: 16, bottom: 0),
