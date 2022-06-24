@@ -14,6 +14,10 @@ void main() {
   runApp(const MyApp());
 }
 
+MqttServerClient newMqttClient() {
+  return MqttServerClient.withPort('202.38.75.252', 'ibeacon', 1883);
+}
+
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
@@ -50,7 +54,7 @@ class _MyHomePageState extends State<MyHomePage> {
   List<double>? _magnetometerValues;
 
   // MQTT client
-  final _client = MqttServerClient.withPort('202.38.75.252', 'ibeacon', 1883);
+  MqttServerClient _client = newMqttClient();
 
   bool _isConnectToMqtt = false;
 
@@ -210,8 +214,11 @@ class _MyHomePageState extends State<MyHomePage> {
                     const TextStyle(fontSize: 20, fontFamily: "IBM Plex Mono"),
               ),
               Text(
-                "RSSI: ${data.rssi} Distance: ${data.distance}",
+                "RSSI: ${data.rssi} Distance: ${data.distance}(${data.proximity})",
                 style: const TextStyle(fontFamily: "IBM Plex Mono"),
+                overflow: TextOverflow.fade,
+                maxLines: 1,
+                softWrap: false,
               ),
               Text(
                 data.uuid,
@@ -253,9 +260,34 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  void _startScan() async {
-    // 开始扫描
+  void alert(String message) {
+    var snackBar = SnackBar(
+      content: Text(message),
+    );
+    ScaffoldMessenger.of(context).showSnackBar(snackBar);
+  }
 
+  void _startScan() async {
+    if (_isConnectToMqtt) {
+      // 连接到服务器
+      try {
+        await _client.connect();
+        alert("MQTT 服务器连接成功");
+      } on NoConnectionException catch (e) {
+        alert('服务器连接成功出错 - $e');
+        _client.disconnect();
+        setState(() {
+          _isConnectToMqtt = false;
+        });
+      } on SocketException catch (e) {
+        alert('服务器连接成功出错 - $e');
+        _client.disconnect();
+        setState(() {
+          _isConnectToMqtt = false;
+        });
+      }
+    }
+    // 开始扫描
     for (var beacon in _room.beacons) {
       await BeaconsPlugin.addRegion("EW80ECCACD", beacon.uuid);
     }
@@ -268,6 +300,10 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _stopScan() async {
+    if (_isConnectToMqtt) {
+      _client.disconnect();
+      _client = newMqttClient();
+    }
     // 停止扫描
     await BeaconsPlugin.stopMonitoring();
     await BeaconsPlugin.clearRegions();
@@ -281,28 +317,9 @@ class _MyHomePageState extends State<MyHomePage> {
   /// 是否将数据推送到服务器
   ///
   void _handleConnectStateChange(bool state) async {
-    if (state) {
-      if (!_isRunning) {
-        return;
-      }
-      _isConnectToMqtt = true;
-      try {
-        await _client.connect();
-      } on NoConnectionException catch (e) {
-        // Raised by the client when connection fails.
-        // print('EXAMPLE::client exception - $e');
-        _isConnectToMqtt = false;
-        _client.disconnect();
-      } on SocketException catch (e) {
-        // Raised by the socket layer
-        // print('EXAMPLE::socket exception - $e');
-        _client.disconnect();
-        _isConnectToMqtt = false;
-      }
-    } else {
-      _client.disconnect();
-      _isConnectToMqtt = false;
-    }
+    setState(() {
+      _isConnectToMqtt = state;
+    });
   }
 
   void _handleRoomChange(BeaconMap? room) {
@@ -349,17 +366,20 @@ class _MyHomePageState extends State<MyHomePage> {
                     );
                   }).toList(),
                 ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    const Text("是否推送到服务器",
-                        style: TextStyle(
-                            color: Colors.grey, fontWeight: FontWeight.bold)),
-                    Switch(
-                      value: _isConnectToMqtt,
-                      onChanged: _handleConnectStateChange,
-                    ),
-                  ],
+                Visibility(
+                  visible: !_isRunning,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      const Text("是否推送到服务器",
+                          style: TextStyle(
+                              color: Colors.grey, fontWeight: FontWeight.bold)),
+                      Switch(
+                        value: _isConnectToMqtt,
+                        onChanged: _handleConnectStateChange,
+                      ),
+                    ],
+                  ),
                 ),
                 Container(
                   padding: const EdgeInsets.only(top: 16, bottom: 0),
